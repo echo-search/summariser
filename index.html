@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DuckDuckGo Summarizer</title>
+<style>
+body { font-family: Arial; max-width: 700px; margin: auto; padding: 20px; }
+textarea { width: 100%; height: 50px; }
+button { margin: 10px 0; padding: 10px 20px; }
+#summary { margin-top: 20px; background: #f0f0f0; padding: 15px; border-radius: 5px; line-height: 1.5; }
+#results { margin-top: 20px; font-size: 14px; color: #555; }
+a { color: #0077cc; text-decoration: none; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<h2>DuckDuckGo Top 5 Summarizer</h2>
+<textarea id="question">When was King Charles III born?</textarea>
+<br>
+<button onclick="fetchAndSummarize()">Fetch & Summarize</button>
+
+<div id="summary">Summary will appear here...</div>
+<div id="results"></div>
+
+<script>
+async function fetchAndSummarize() {
+    const query = document.getElementById("question").value;
+    const resultsDiv = document.getElementById("results");
+    const summaryDiv = document.getElementById("summary");
+
+    resultsDiv.innerText = "Fetching top 5 results...";
+    summaryDiv.innerText = "Summarizing...";
+
+    try {
+        // Call serverless function
+        const res = await fetch(`/api/ddg?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+
+        // Collect top snippets (Abstract + first 4 RelatedTopics)
+        let sources = [];
+        if (data.AbstractText) {
+            sources.push({text: data.AbstractText, link: data.AbstractURL});
+        }
+        if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+            for (let i = 0; i < Math.min(4, data.RelatedTopics.length); i++) {
+                let t = data.RelatedTopics[i];
+                if (t.Text) sources.push({text: t.Text, link: t.FirstURL});
+            }
+        }
+
+        if (sources.length === 0) {
+            summaryDiv.innerText = "No results found.";
+            resultsDiv.innerText = "";
+            return;
+        }
+
+        // Show sources with links
+        resultsDiv.innerHTML = "<b>Top sources:</b><br>" + sources.map(s => 
+            `<a href="${s.link}" target="_blank">${s.link}</a><br>${s.text}`
+        ).join("<br><br>");
+
+        // Extractive summarization
+        let text = sources.map(s => s.text).join(" ");
+        let sentences = text.match(/[^\.!\?]+[\.!\?]+/g) || [];
+        sentences = [...new Set(sentences.map(s => s.trim()))]; // remove duplicates
+
+        const wordCounts = {};
+        const stopwords = ["the","is","of","and","a","his","was","in","on","after","before","her","he","to","for","with","as","by","an"];
+        sentences.forEach(s => {
+            s.toLowerCase().split(/\W+/).forEach(w => {
+                if (w && !stopwords.includes(w)) wordCounts[w] = (wordCounts[w] || 0) + 1;
+            });
+        });
+
+        const scored = sentences.map(s => {
+            let score = 0;
+            s.toLowerCase().split(/\W+/).forEach(w => { if (wordCounts[w]) score += wordCounts[w]; });
+            return {sentence: s, score};
+        });
+
+        scored.sort((a,b)=>b.score-a.score);
+        const topSentences = scored.slice(0,3).map(s => s.sentence);
+        summaryDiv.innerText = topSentences.join(" ").replace(/\s+/g,' ').trim();
+
+    } catch(e) {
+        summaryDiv.innerText = "Error fetching results: " + e;
+        resultsDiv.innerText = "";
+    }
+}
+</script>
+</body>
+</html>
