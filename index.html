@@ -33,7 +33,7 @@ async function fetchAndSummarize() {
 
     try {
         // Call serverless function
-        const res = await fetch(`/api/ddg?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`/netlify/functions/ddg?q=${encodeURIComponent(query)}`);
         const data = await res.json();
 
         // Collect top snippets (Abstract + first 4 RelatedTopics)
